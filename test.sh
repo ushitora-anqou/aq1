@@ -14,3 +14,8 @@ unittest() {
 
 #unittest "output" "input"
 unittest "42" "42"
+unittest "42" "42.0"
+unittest "42" "42."
+unittest "42.5" "42.5"
+unittest "3.14159" "3.14159"
+unittest "3.1415926535897932384626433832795028" "3.1415926535897932384626433832795028"
