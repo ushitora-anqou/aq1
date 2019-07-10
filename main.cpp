@@ -13,6 +13,11 @@
     std::terminate();
 }
 
+[[noreturn]] void unreachable(const char *msg)
+{
+    AQ1_ASSERT(false, msg);
+}
+
 Token Lex::get()
 {
     if (pending_) {
@@ -76,22 +81,35 @@ bool Lex::is(TOK kind)
     return pending_->kind == kind;
 }
 
-MPRational Evaluator::eval()
+MPRational BinOp::eval() const
+{
+    MPRational lhs = lhs_->eval(), rhs = rhs_->eval();
+
+    switch (kind_) {
+    case BINOP::ADD:
+        return lhs + rhs;
+    case BINOP::SUB:
+        return lhs - rhs;
+    }
+
+    unreachable("Invalid binop's kind");
+}
+
+ASTNodePtr Parser::parse()
 {
     Token tok = lex_.get_skipping_lfcr();
     if (tok.kind == TOK::NUMLIT) {
-        MPRational lhs = std::get<MPRational>(tok.data);
+        ASTNodePtr lhs =
+            std::make_shared<NumImm>(std::get<MPRational>(tok.data));
 
         while (lex_.is(TOK::PLUS) || lex_.is(TOK::MINUS)) {
             bool isPlus = lex_.get().kind == TOK::PLUS;
             tok = lex_.get_skipping_lfcr();
             if (tok.kind != TOK::NUMLIT) error("Invalid addition");
-            const MPRational &rhs = std::get<MPRational>(tok.data);
-
-            if (isPlus)
-                lhs += rhs;
-            else
-                lhs -= rhs;
+            ASTNodePtr rhs =
+                std::make_shared<NumImm>(std::get<MPRational>(tok.data));
+            lhs = std::make_shared<BinOp>(isPlus ? BINOP::ADD : BINOP::SUB, lhs,
+                                          rhs);
         }
 
         return lhs;
@@ -120,6 +138,6 @@ std::ostream &operator<<(std::ostream &os, const MPRational &r)
 int main(int argc, char **argv)
 {
     Lex lex(std::cin);
-    Evaluator evalor(lex);
-    std::cout << evalor.eval() << std::endl;
+    Parser parser(lex);
+    std::cout << parser.parse()->eval() << std::endl;
 }

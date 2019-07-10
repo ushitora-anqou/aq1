@@ -2,6 +2,7 @@
 #define AQ1_MAIN_HPP
 
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <variant>
 
@@ -46,16 +47,69 @@ public:
     bool is(TOK kind);
 };
 
-class Evaluator {
+class ASTNode {
+public:
+    ASTNode() = default;
+
+    // Thanks to:
+    // https://github.com/isocpp/CppCoreGuidelines/blob/master/CppCoreGuidelines.md#Rc-copy-virtual
+    // Thanks to:
+    // https://github.com/isocpp/CppCoreGuidelines/blob/master/CppCoreGuidelines.md#Rc-five
+    virtual ~ASTNode() = default;
+    ASTNode(const ASTNode &) = delete;
+    ASTNode &operator=(const ASTNode &) = delete;
+    ASTNode(ASTNode &&) = delete;
+    ASTNode &operator=(ASTNode &&) = delete;
+
+    virtual MPRational eval() const = 0;
+};
+
+using ASTNodePtr = std::shared_ptr<ASTNode>;
+
+enum class BINOP {
+    ADD,
+    SUB,
+};
+
+class BinOp : public ASTNode {
+private:
+    BINOP kind_;
+    ASTNodePtr lhs_, rhs_;
+
+public:
+    BinOp(BINOP kind, ASTNodePtr lhs, ASTNodePtr rhs)
+        : kind_(kind), lhs_(lhs), rhs_(rhs)
+    {
+    }
+
+    MPRational eval() const override;
+};
+
+class NumImm : public ASTNode {
+private:
+    MPRational val_;
+
+public:
+    NumImm(MPRational val) : val_(val)
+    {
+    }
+
+    MPRational eval() const override
+    {
+        return val_;
+    }
+};
+
+class Parser {
 private:
     Lex &lex_;
 
 public:
-    Evaluator(Lex &lex) : lex_(lex)
+    Parser(Lex &lex) : lex_(lex)
     {
     }
 
-    MPRational eval();
+    ASTNodePtr parse();
 };
 
 #endif
