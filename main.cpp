@@ -53,6 +53,10 @@ Token Lex::get()
         return {TOK::PLUS};
     case '-':
         return {TOK::MINUS};
+    case '*':
+        return {TOK::STAR};
+    case '/':
+        return {TOK::SLASH};
     case '\n':
         return {TOK::LFCR};
     case '\r': {
@@ -90,32 +94,58 @@ MPRational BinOp::eval() const
         return lhs + rhs;
     case BINOP::SUB:
         return lhs - rhs;
+    case BINOP::MUL:
+        return lhs * rhs;
+    case BINOP::DIV:
+        return lhs / rhs;
     }
 
     unreachable("Invalid binop's kind");
 }
 
-ASTNodePtr Parser::parse()
+ASTNodePtr Parser::parse_primary()
 {
     Token tok = lex_.get_skipping_lfcr();
-    if (tok.kind == TOK::NUMLIT) {
-        ASTNodePtr lhs =
-            std::make_shared<NumImm>(std::get<MPRational>(tok.data));
 
-        while (lex_.is(TOK::PLUS) || lex_.is(TOK::MINUS)) {
-            bool isPlus = lex_.get().kind == TOK::PLUS;
-            tok = lex_.get_skipping_lfcr();
-            if (tok.kind != TOK::NUMLIT) error("Invalid addition");
-            ASTNodePtr rhs =
-                std::make_shared<NumImm>(std::get<MPRational>(tok.data));
-            lhs = std::make_shared<BinOp>(isPlus ? BINOP::ADD : BINOP::SUB, lhs,
-                                          rhs);
-        }
+    switch (tok.kind) {
+    case TOK::NUMLIT:
+        return std::make_shared<NumImm>(std::get<MPRational>(tok.data));
+    default:
+        error("Expect primary token");
+    }
+}
 
-        return lhs;
+ASTNodePtr Parser::parse_multiplicative()
+{
+    ASTNodePtr lhs = parse_primary();
+
+    while (lex_.is(TOK::STAR) || lex_.is(TOK::SLASH)) {
+        bool isMul = lex_.get().kind == TOK::STAR;
+        ASTNodePtr rhs = parse_primary();
+        lhs =
+            std::make_shared<BinOp>(isMul ? BINOP::MUL : BINOP::DIV, lhs, rhs);
     }
 
-    error("Can't parse");
+    return lhs;
+}
+
+ASTNodePtr Parser::parse_additive()
+{
+    ASTNodePtr lhs = parse_multiplicative();
+
+    while (lex_.is(TOK::PLUS) || lex_.is(TOK::MINUS)) {
+        bool isAdd = lex_.get().kind == TOK::PLUS;
+        ASTNodePtr rhs = parse_multiplicative();
+        lhs =
+            std::make_shared<BinOp>(isAdd ? BINOP::ADD : BINOP::SUB, lhs, rhs);
+    }
+
+    return lhs;
+}
+
+ASTNodePtr Parser::parse()
+{
+    return parse_additive();
 }
 
 // Pretty print

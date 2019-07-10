@@ -18,6 +18,8 @@ enum class TOK {
     OWARI,   // End of file
     PLUS,
     MINUS,
+    STAR,
+    SLASH,
     LFCR,
 };
 
@@ -69,6 +71,8 @@ using ASTNodePtr = std::shared_ptr<ASTNode>;
 enum class BINOP {
     ADD,
     SUB,
+    MUL,
+    DIV,
 };
 
 class BinOp : public ASTNode {
@@ -103,6 +107,10 @@ public:
 class Parser {
 private:
     Lex &lex_;
+
+    ASTNodePtr parse_primary();
+    ASTNodePtr parse_multiplicative();
+    ASTNodePtr parse_additive();
 
 public:
     Parser(Lex &lex) : lex_(lex)
