@@ -60,9 +60,12 @@ Token Lex::next()
         return ret;
     }
 
-    AQ1_ASSERT(is_.good(), "Invalid input stream.");
-    int ch = is_.get();
-    if (ch == EOF) return Token::owari();  // TOKEN NO OWARI
+    int ch;
+    do {
+        AQ1_ASSERT(is_.good(), "Invalid input stream.");
+        ch = is_.get();
+        if (ch == EOF) return Token::owari();  // TOKEN NO OWARI
+    } while (isspace(ch));
 
     // When numeric literal
     if (isdigit(ch)) {
