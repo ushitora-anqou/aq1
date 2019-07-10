@@ -25,6 +25,7 @@ enum class TOK {
     NUMLIT,  // Numeric literal
     OWARI,   // End of file
     PLUS,
+    MINUS,
     LFCR,
 };
 
@@ -87,6 +88,8 @@ Token Lex::get()
     switch (ch) {
     case '+':
         return {TOK::PLUS};
+    case '-':
+        return {TOK::MINUS};
     case '\n':
         return {TOK::LFCR};
     case '\r': {
@@ -131,16 +134,21 @@ MPRational Evaluator::eval()
 {
     Token tok = lex_.get_skipping_lfcr();
     if (tok.kind == TOK::NUMLIT) {
-        MPRational val = std::get<MPRational>(tok.data);
-        while (lex_.is(TOK::PLUS)) {
-            lex_.get();  // Eat TOK::PLUS
+        MPRational lhs = std::get<MPRational>(tok.data);
+
+        while (lex_.is(TOK::PLUS) || lex_.is(TOK::MINUS)) {
+            bool isPlus = lex_.get().kind == TOK::PLUS;
             tok = lex_.get_skipping_lfcr();
             if (tok.kind != TOK::NUMLIT) error("Invalid addition");
             const MPRational &rhs = std::get<MPRational>(tok.data);
 
-            val += rhs;
+            if (isPlus)
+                lhs += rhs;
+            else
+                lhs -= rhs;
         }
-        return val;
+
+        return lhs;
     }
 
     error("Can't parse");
