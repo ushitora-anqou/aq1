@@ -18,7 +18,7 @@
     AQ1_ASSERT(false, msg);
 }
 
-Token Lex::get()
+Token Lex::next()
 {
     if (pending_) {
         Token ret = *pending_;
@@ -57,6 +57,10 @@ Token Lex::get()
         return {TOK::STAR};
     case '/':
         return {TOK::SLASH};
+    case '(':
+        return {TOK::LPAREN};
+    case ')':
+        return {TOK::RPAREN};
     case '\n':
         return {TOK::LFCR};
     case '\r': {
@@ -71,17 +75,25 @@ Token Lex::get()
     return Token::owari();
 }
 
-Token Lex::get_skipping_lfcr()
+Token Lex::get()
 {
     while (true) {
-        Token tok = get();
+        Token tok = next();
         if (tok.kind != TOK::LFCR) return tok;
     }
 }
 
+Token Lex::expect(TOK kind)
+{
+    Token tok = get();
+    if (tok.kind != kind)
+        error("Unexpected token: got \"%1%\", but expect \"%2%\"");
+    return tok;
+}
+
 bool Lex::is(TOK kind)
 {
-    if (!pending_) pending_ = get();
+    if (!pending_) pending_ = next();
     return pending_->kind == kind;
 }
 
@@ -105,11 +117,16 @@ MPRational BinOp::eval() const
 
 ASTNodePtr Parser::parse_primary()
 {
-    Token tok = lex_.get_skipping_lfcr();
+    Token tok = lex_.get();
 
     switch (tok.kind) {
     case TOK::NUMLIT:
         return std::make_shared<NumImm>(std::get<MPRational>(tok.data));
+    case TOK::LPAREN: {
+        ASTNodePtr ast = parse_expr();
+        lex_.expect(TOK::RPAREN);
+        return ast;
+    }
     default:
         error("Expect primary token");
     }
@@ -143,9 +160,14 @@ ASTNodePtr Parser::parse_additive()
     return lhs;
 }
 
-ASTNodePtr Parser::parse()
+ASTNodePtr Parser::parse_expr()
 {
     return parse_additive();
+}
+
+ASTNodePtr Parser::parse()
+{
+    return parse_expr();
 }
 
 // Pretty print

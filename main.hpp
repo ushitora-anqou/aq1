@@ -21,6 +21,8 @@ enum class TOK {
     STAR,
     SLASH,
     LFCR,
+    LPAREN,
+    RPAREN,
 };
 
 struct Token {
@@ -44,9 +46,15 @@ public:
     {
     }
 
-    Token get();
-    Token get_skipping_lfcr();
+    // Get the next token. This function will NOT skip `LFCR`.
+    Token next();
+    // Return if the next token's kind is `kind`. This function will NOT skip
+    // `LFCR`.
     bool is(TOK kind);
+    // Get the next token. This function WILL skip `LFCR`.
+    Token get();
+    // Expect the next token. This function WILL skip `LFCR`.
+    Token expect(TOK kind);
 };
 
 class ASTNode {
@@ -111,6 +119,7 @@ private:
     ASTNodePtr parse_primary();
     ASTNodePtr parse_multiplicative();
     ASTNodePtr parse_additive();
+    ASTNodePtr parse_expr();
 
 public:
     Parser(Lex &lex) : lex_(lex)
