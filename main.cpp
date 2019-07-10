@@ -49,12 +49,12 @@ public:
     {
     }
 
-    Token next();
-    Token next_skipping_lfcr();
+    Token get();
+    Token get_skipping_lfcr();
     bool is(TOK kind);
 };
 
-Token Lex::next()
+Token Lex::get()
 {
     if (pending_) {
         Token ret = *pending_;
@@ -101,17 +101,17 @@ Token Lex::next()
     return Token::owari();
 }
 
-Token Lex::next_skipping_lfcr()
+Token Lex::get_skipping_lfcr()
 {
     while (true) {
-        Token tok = next();
+        Token tok = get();
         if (tok.kind != TOK::LFCR) return tok;
     }
 }
 
 bool Lex::is(TOK kind)
 {
-    if (!pending_) pending_ = next();
+    if (!pending_) pending_ = get();
     return pending_->kind == kind;
 }
 
@@ -129,12 +129,12 @@ public:
 
 MPRational Evaluator::eval()
 {
-    Token tok = lex_.next_skipping_lfcr();
+    Token tok = lex_.get_skipping_lfcr();
     if (tok.kind == TOK::NUMLIT) {
         MPRational val = std::get<MPRational>(tok.data);
         while (lex_.is(TOK::PLUS)) {
-            lex_.next();  // Eat TOK::PLUS
-            tok = lex_.next_skipping_lfcr();
+            lex_.get();  // Eat TOK::PLUS
+            tok = lex_.get_skipping_lfcr();
             if (tok.kind != TOK::NUMLIT) error("Invalid addition");
             val += std::get<MPRational>(tok.data);
         }
