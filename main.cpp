@@ -17,7 +17,7 @@ using MPRational = boost::rational<mp::cpp_int>;
 
 [[noreturn]] void error(const char *msg)
 {
-    std::cerr << "[ERROR]\t" << msg;
+    std::cerr << "[ERROR]\t" << msg << std::endl;
     std::terminate();
 }
 
@@ -25,6 +25,7 @@ enum class TOK {
     NUMLIT,  // Numeric literal
     OWARI,   // End of file
     PLUS,
+    LFCR,
 };
 
 struct Token {
@@ -49,6 +50,7 @@ public:
     }
 
     Token next();
+    Token next_skipping_lfcr();
     bool is(TOK kind);
 };
 
@@ -65,7 +67,7 @@ Token Lex::next()
         AQ1_ASSERT(is_.good(), "Invalid input stream.");
         ch = is_.get();
         if (ch == EOF) return Token::owari();  // TOKEN NO OWARI
-    } while (isspace(ch));
+    } while (isspace(ch) && ch != '\r' && ch != '\n');
 
     // When numeric literal
     if (isdigit(ch)) {
@@ -85,11 +87,26 @@ Token Lex::next()
     switch (ch) {
     case '+':
         return {TOK::PLUS};
+    case '\n':
+        return {TOK::LFCR};
+    case '\r': {
+        ch = is_.get();
+        if (ch != '\n') is_.putback(ch);
+        return {TOK::LFCR};
+    }
     }
 
     // No valid token
     is_.putback(ch);
     return Token::owari();
+}
+
+Token Lex::next_skipping_lfcr()
+{
+    while (true) {
+        Token tok = next();
+        if (tok.kind != TOK::LFCR) return tok;
+    }
 }
 
 bool Lex::is(TOK kind)
@@ -112,12 +129,12 @@ public:
 
 MPRational Evaluator::eval()
 {
-    Token tok = lex_.next();
+    Token tok = lex_.next_skipping_lfcr();
     if (tok.kind == TOK::NUMLIT) {
         MPRational val = std::get<MPRational>(tok.data);
         while (lex_.is(TOK::PLUS)) {
             lex_.next();  // Eat TOK::PLUS
-            tok = lex_.next();
+            tok = lex_.next_skipping_lfcr();
             if (tok.kind != TOK::NUMLIT) error("Invalid addition");
             val += std::get<MPRational>(tok.data);
         }
