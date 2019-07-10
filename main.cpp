@@ -136,7 +136,9 @@ MPRational Evaluator::eval()
             lex_.get();  // Eat TOK::PLUS
             tok = lex_.get_skipping_lfcr();
             if (tok.kind != TOK::NUMLIT) error("Invalid addition");
-            val += std::get<MPRational>(tok.data);
+            const MPRational &rhs = std::get<MPRational>(tok.data);
+
+            val += rhs;
         }
         return val;
     }
