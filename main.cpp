@@ -1,13 +1,19 @@
 #include "main.hpp"
 
 #include <cassert>
+#include <functional>
+#include <sstream>
+#include <unordered_map>
+
+#include <boost/format.hpp>
 
 #define AQ1_ASSERT(cond, msg)    \
     do {                         \
         assert((cond) && (msg)); \
     } while (0);
 
-[[noreturn]] void error(const char *msg)
+template <class T>
+[[noreturn]] void error(T msg)
 {
     std::cerr << "[ERROR]\t" << msg << std::endl;
     std::terminate();
@@ -16,6 +22,31 @@
 [[noreturn]] void unreachable(const char *msg)
 {
     AQ1_ASSERT(false, msg);
+}
+
+// Convert fractions to floating points
+// TODO: Much smarter way?
+MPFloat r2f(const MPRational &r)
+{
+    return MPFloat{r.numerator().str()} / MPFloat{r.denominator().str()};
+}
+
+MPInt f2i(MPFloat f)
+{
+    return MPInt{MPFloat{mp::floor(f)}.str()};
+}
+
+MPFloat i2f(MPInt i)
+{
+    return MPFloat{i.str()};
+}
+
+MPRational f2r(const MPFloat &f)
+{
+    // TODO: Is that correct?
+    MPInt base{10};
+    base = mp::pow(base, 100);  // 10^100
+    return MPRational{f2i(f * i2f(base)), base};
 }
 
 Token Lex::next()
@@ -48,6 +79,15 @@ Token Lex::next()
         return {TOK::NUMLIT, n};
     }
 
+    // When identifier
+    if (isalpha(ch)) {
+        std::stringstream ss;
+        ss << (char)ch;
+        while (isalnum(ch = is_.get())) ss << (char)ch;
+        is_.putback(ch);
+        return {TOK::IDENT, ss.str()};
+    }
+
     switch (ch) {
     case '+':
         return {TOK::PLUS};
@@ -61,6 +101,8 @@ Token Lex::next()
         return {TOK::LPAREN};
     case ')':
         return {TOK::RPAREN};
+    case ',':
+        return {TOK::COMMA};
     case '\n':
         return {TOK::LFCR};
     case '\r': {
@@ -97,6 +139,12 @@ bool Lex::is(TOK kind)
     return pending_->kind == kind;
 }
 
+bool Lex::match(TOK kind)
+{
+    if (!pending_ || pending_->kind == TOK::LFCR) pending_ = get();
+    return pending_->kind == kind;
+}
+
 MPRational BinOp::eval() const
 {
     MPRational lhs = lhs_->eval(), rhs = rhs_->eval();
@@ -115,6 +163,35 @@ MPRational BinOp::eval() const
     unreachable("Invalid binop's kind");
 }
 
+MPRational FuncCall::eval() const
+{
+    std::unordered_map<std::string,
+                       std::pair<size_t, std::function<MPRational(
+                                             const std::vector<MPRational> &)>>>
+        functbl = {
+            {"sqrt",
+             {1, [](auto &&args) { return f2r(mp::sqrt(r2f(args[0]))); }}},
+            {"floor",
+             {1, [](auto &&args) { return f2r(mp::floor(r2f(args[0]))); }}},
+            {"scale", {2, [](auto &&args) {
+                           MPFloat base = mp::pow(10, r2f(args[0]));
+                           return f2r(mp::floor(r2f(args[1]) * base) / base);
+                       }}}};
+
+    auto it = functbl.find(name_);
+    if (it != functbl.end()) {
+        if (args_.size() != it->second.first)
+            error("Invalid number of arguments for \"%1%\"");
+
+        std::vector<MPRational> args;
+        for (auto &&arg : args_) args.push_back(arg->eval());
+
+        return it->second.second(args);
+    }
+
+    error(boost::format("Invalid function name \"%1%\"") % name_);
+}
+
 ASTNodePtr Parser::parse_primary()
 {
     Token tok = lex_.get();
@@ -125,6 +202,23 @@ ASTNodePtr Parser::parse_primary()
     case TOK::LPAREN: {
         ASTNodePtr ast = parse_expr();
         lex_.expect(TOK::RPAREN);
+        return ast;
+    }
+    case TOK::IDENT: {  // function call
+        std::string funcname = std::get<std::string>(tok.data);
+        std::vector<ASTNodePtr> args;
+
+        lex_.expect(TOK::LPAREN);
+        if (!lex_.match(TOK::RPAREN)) {
+            args.push_back(parse_expr());
+            while (lex_.match(TOK::COMMA)) {
+                lex_.get();  // Eat TOK::COMMA
+                args.push_back(parse_expr());
+            }
+        }
+        lex_.expect(TOK::RPAREN);
+
+        ASTNodePtr ast = std::make_shared<FuncCall>(funcname, args);
         return ast;
     }
     default:
@@ -173,17 +267,7 @@ ASTNodePtr Parser::parse()
 // Pretty print
 std::ostream &operator<<(std::ostream &os, const MPRational &r)
 {
-    if (r.denominator() == 1) {  // When Integer
-        os << r.numerator();
-    }
-    else {  // Convert fractions to floating points
-        // TODO: Much smarter way?
-        mp::cpp_dec_float_100 den{r.denominator().str()},
-            num{r.numerator().str()};
-        mp::cpp_dec_float_100 t = num / den;
-        os << t.str();
-    }
-
+    os << r2f(r).str();
     return os;
 }
 

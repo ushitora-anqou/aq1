@@ -4,14 +4,18 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <string>
 #include <variant>
+#include <vector>
 
 #include <boost/multiprecision/cpp_dec_float.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/rational.hpp>
 
 namespace mp = boost::multiprecision;
-using MPRational = boost::rational<mp::cpp_int>;
+using MPInt = mp::cpp_int;
+using MPRational = boost::rational<MPInt>;
+using MPFloat = mp::cpp_dec_float_100;
 
 enum class TOK {
     NUMLIT,  // Numeric literal
@@ -23,11 +27,13 @@ enum class TOK {
     LFCR,
     LPAREN,
     RPAREN,
+    IDENT,
+    COMMA,
 };
 
 struct Token {
     TOK kind;
-    std::variant<std::monostate, MPRational> data;
+    std::variant<std::monostate, MPRational, std::string> data;
 
     static const Token &owari()
     {
@@ -55,6 +61,9 @@ public:
     Token get();
     // Expect the next token. This function WILL skip `LFCR`.
     Token expect(TOK kind);
+    // Return if the next token's kind is `kind`. This function WILL skip
+    // `LFCR`.
+    bool match(TOK kind);
 };
 
 class ASTNode {
@@ -90,7 +99,7 @@ private:
 
 public:
     BinOp(BINOP kind, ASTNodePtr lhs, ASTNodePtr rhs)
-        : kind_(kind), lhs_(lhs), rhs_(rhs)
+        : kind_(kind), lhs_(std::move(lhs)), rhs_(std::move(rhs))
     {
     }
 
@@ -102,7 +111,7 @@ private:
     MPRational val_;
 
 public:
-    NumImm(MPRational val) : val_(val)
+    NumImm(MPRational val) : val_(std::move(val))
     {
     }
 
@@ -110,6 +119,20 @@ public:
     {
         return val_;
     }
+};
+
+class FuncCall : public ASTNode {
+private:
+    std::string name_;
+    std::vector<ASTNodePtr> args_;
+
+public:
+    FuncCall(std::string name, std::vector<ASTNodePtr> args)
+        : name_(std::move(name)), args_(std::move(args))
+    {
+    }
+
+    MPRational eval() const override;
 };
 
 class Parser {
