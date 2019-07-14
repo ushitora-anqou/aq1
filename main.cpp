@@ -5,7 +5,15 @@
 #include <sstream>
 #include <unordered_map>
 
+#include <readline/history.h>
+#include <readline/readline.h>
+#include <boost/algorithm/string/trim.hpp>
 #include <boost/format.hpp>
+#include <boost/iostreams/concepts.hpp>
+#include <boost/iostreams/stream.hpp>
+#include <deque>
+
+#define AQ1_RANGE(cont) std::begin(cont), std::end(cont)
 
 #define AQ1_ASSERT(cond, msg)    \
     do {                         \
@@ -49,6 +57,26 @@ MPRational f2r(const MPFloat &f)
     return MPRational{f2i(f * i2f(base)), base};
 }
 
+int Lex::getch()
+{
+    int ch = is_.get();
+    if (ch != EOF) history_.push_back(ch);
+    return ch;
+}
+
+void Lex::putback(int ch)
+{
+    if (!history_.empty()) history_.pop_back();
+    is_.putback(ch);
+}
+
+std::string Lex::clear_history()
+{
+    std::string ret{AQ1_RANGE(history_)};
+    std::vector<char>{}.swap(history_);
+    return ret;
+}
+
 Token Lex::next()
 {
     if (pending_) {
@@ -60,22 +88,22 @@ Token Lex::next()
     int ch;
     do {
         AQ1_ASSERT(is_.good(), "Invalid input stream.");
-        ch = is_.get();
+        ch = getch();
         if (ch == EOF) return Token::owari();  // TOKEN NO OWARI
     } while (isspace(ch) && ch != '\r' && ch != '\n');
 
     // When numeric literal
     if (isdigit(ch)) {
         MPRational n = ch - '0';
-        while (isdigit(ch = is_.get())) n = n * 10 + ch - '0';
+        while (isdigit(ch = getch())) n = n * 10 + ch - '0';
         if (ch == '.') {
             MPRational digit = 1;
-            while (isdigit(ch = is_.get())) {
+            while (isdigit(ch = getch())) {
                 digit /= 10;
                 n += digit * (ch - '0');
             }
         }
-        is_.putback(ch);
+        putback(ch);
         return {TOK::NUMLIT, n};
     }
 
@@ -83,8 +111,8 @@ Token Lex::next()
     if (isalpha(ch)) {
         std::stringstream ss;
         ss << (char)ch;
-        while (isalnum(ch = is_.get())) ss << (char)ch;
-        is_.putback(ch);
+        while (isalnum(ch = getch())) ss << (char)ch;
+        putback(ch);
         return {TOK::IDENT, ss.str()};
     }
 
@@ -106,14 +134,14 @@ Token Lex::next()
     case '\n':
         return {TOK::LFCR};
     case '\r': {
-        ch = is_.get();
-        if (ch != '\n') is_.putback(ch);
+        ch = getch();
+        if (ch != '\n') putback(ch);
         return {TOK::LFCR};
     }
     }
 
     // No valid token
-    is_.putback(ch);
+    putback(ch);
     return Token::owari();
 }
 
@@ -271,9 +299,67 @@ std::ostream &operator<<(std::ostream &os, const MPRational &r)
     return os;
 }
 
+class StreamLine : public boost::iostreams::source {
+private:
+    std::deque<char> buffer_;
+
+public:
+    StreamLine()
+    {
+    }
+
+    std::streamsize read(char *s, std::streamsize n)
+    {
+        assert(n >= 1);
+
+        if (!isatty()) {  // When non-interactive (batch mode)
+            int ch = std::cin.get();
+            if (ch == EOF) return -1;
+            s[0] = ch;
+            return 1;
+        }
+
+        if (buffer_.empty()) {
+            std::shared_ptr<char> buf =
+                std::shared_ptr<char>{::readline(">> ")};
+            if (!buf || *buf == '\0') return -1;  // EOF
+            std::string line{buf.get()};
+            std::copy(AQ1_RANGE(line), std::back_inserter(buffer_));
+            buffer_.push_back('\n');
+        }
+
+        assert(!buffer_.empty());
+
+        s[0] = buffer_.front();
+        buffer_.pop_front();
+        return 1;
+    }
+
+    static void add_history(const std::string &src)
+    {
+        ::add_history(src.c_str());
+    }
+
+    static bool isatty()
+    {
+        return ::isatty(0);
+    }
+};
+
 int main(int argc, char **argv)
 {
-    Lex lex(std::cin);
-    Parser parser(lex);
-    std::cout << parser.parse()->eval() << std::endl;
+    boost::iostreams::stream<StreamLine> in{StreamLine{}};
+    Lex lex{in};
+
+    if (!StreamLine::isatty()) {  // When non-interactive (batch mode)
+        std::cout << Parser{lex}.parse()->eval() << std::endl;
+        return 0;
+    }
+
+    while (true) {
+        ASTNodePtr node = Parser{lex}.parse();
+        StreamLine::add_history(
+            boost::algorithm::trim_copy(lex.clear_history()));
+        std::cout << node->eval() << std::endl;
+    }
 }

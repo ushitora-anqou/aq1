@@ -46,6 +46,10 @@ class Lex {
 private:
     std::istream &is_;
     std::optional<Token> pending_;
+    std::vector<char> history_;
+
+    int getch();
+    void putback(int ch);
 
 public:
     Lex(std::istream &is) : is_(is), pending_(std::nullopt)
@@ -64,6 +68,8 @@ public:
     // Return if the next token's kind is `kind`. This function WILL skip
     // `LFCR`.
     bool match(TOK kind);
+
+    std::string clear_history();
 };
 
 class ASTNode {
