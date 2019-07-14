@@ -91,6 +91,24 @@ public:
 
 using ASTNodePtr = std::shared_ptr<ASTNode>;
 
+enum class UNARYOP {
+    PLUS,
+    MINUS,
+};
+
+class UnaryOp : public ASTNode {
+private:
+    UNARYOP kind_;
+    ASTNodePtr src_;
+
+public:
+    UnaryOp(UNARYOP kind, ASTNodePtr src) : kind_(kind), src_(std::move(src))
+    {
+    }
+
+    MPRational eval() const override;
+};
+
 enum class BINOP {
     ADD,
     SUB,
@@ -146,6 +164,7 @@ private:
     Lex &lex_;
 
     ASTNodePtr parse_primary();
+    ASTNodePtr parse_unary();
     ASTNodePtr parse_multiplicative();
     ASTNodePtr parse_additive();
     ASTNodePtr parse_expr();

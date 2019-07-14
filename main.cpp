@@ -173,6 +173,20 @@ bool Lex::match(TOK kind)
     return pending_->kind == kind;
 }
 
+MPRational UnaryOp::eval() const
+{
+    MPRational src = src_->eval();
+
+    switch (kind_) {
+    case UNARYOP::PLUS:
+        return src;
+    case UNARYOP::MINUS:
+        return -src;
+    }
+
+    unreachable("Invalid unaryop's kind");
+}
+
 MPRational BinOp::eval() const
 {
     MPRational lhs = lhs_->eval(), rhs = rhs_->eval();
@@ -258,13 +272,26 @@ ASTNodePtr Parser::parse_primary()
     }
 }
 
+ASTNodePtr Parser::parse_unary()
+{
+    if (lex_.match(TOK::PLUS)) {
+        lex_.get();  // Eat TOK::PLUS
+        return std::make_shared<UnaryOp>(UNARYOP::PLUS, parse_primary());
+    }
+    if (lex_.match(TOK::MINUS)) {
+        lex_.get();  // Eat TOK::MINUS
+        return std::make_shared<UnaryOp>(UNARYOP::MINUS, parse_primary());
+    }
+    return parse_primary();
+}
+
 ASTNodePtr Parser::parse_multiplicative()
 {
-    ASTNodePtr lhs = parse_primary();
+    ASTNodePtr lhs = parse_unary();
 
     while (lex_.is(TOK::STAR) || lex_.is(TOK::SLASH)) {
         bool isMul = lex_.get().kind == TOK::STAR;
-        ASTNodePtr rhs = parse_primary();
+        ASTNodePtr rhs = parse_unary();
         lhs =
             std::make_shared<BinOp>(isMul ? BINOP::MUL : BINOP::DIV, lhs, rhs);
     }
