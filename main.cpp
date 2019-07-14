@@ -198,7 +198,11 @@ MPRational FuncCall::eval() const
                                              const std::vector<MPRational> &)>>>
         functbl = {
             {"sqrt",
-             {1, [](auto &&args) { return f2r(mp::sqrt(r2f(args[0]))); }}},
+             {1,
+              [](auto &&args) {
+                  return f2r(mp::sqrt(i2f(args[0].numerator()))) /
+                         f2r(mp::sqrt(i2f(args[0].denominator())));
+              }}},
             {"floor",
              {1, [](auto &&args) { return f2r(mp::floor(r2f(args[0]))); }}},
             {"scale", {2, [](auto &&args) {
