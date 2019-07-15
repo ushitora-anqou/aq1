@@ -49,3 +49,8 @@ aq1test "42" "+42"
 aq1test "-42" "-42"
 aq1test "-4" "-2 * 2"
 aq1test "4" "-2 + 3 * 2"
+aq1test "10000.123" '$2.3 10000.123456'
+aq1test "1.414" '$2.3 sqrt(2)'
+aq1test "-1.414" '$2.3 -sqrt(2)'
+aq1test "-1" '$. -sqrt(2)'
+aq1test "-1.41421" '$.5 -sqrt(2)'

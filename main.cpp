@@ -119,6 +119,19 @@ Token Lex::next_token()
         return {TOK::IDENT, ss.str()};
     }
 
+    // When format literal
+    if (ch == '$') {
+        int field_width = 0, precision = 0;
+        while (isdigit(ch = getch()))
+            field_width = field_width * 10 + (ch - '0');
+        if (ch != '.')
+            error("Format literal should be formated as '$\\d*\\.\\d*'");
+        while (isdigit(ch = getch())) precision = precision * 10 + (ch - '0');
+        putback(ch);
+        return {TOK::FMTLIT,
+                FormatLiteral{false, false, field_width, precision}};
+    }
+
     switch (ch) {
     case '+':
         return {TOK::PLUS};
@@ -134,6 +147,8 @@ Token Lex::next_token()
         return {TOK::RPAREN};
     case ',':
         return {TOK::COMMA};
+    case '%':
+        return {TOK::PERCENT};
     case '\n':
         return {TOK::NEWLINE};
     case '\r': {
@@ -239,6 +254,32 @@ MPRational FuncCall::eval() const
     }
 
     error(boost::format("Invalid function name \"%1%\"") % name_);
+}
+
+MPRational FormatPrint::eval() const
+{
+    MPRational src{src_->eval()};
+    std::string strsrc{r2f(src).str()};
+
+    if (precision_ == -1) {  // No format
+        std::cout << strsrc << std::endl;
+        return src;
+    }
+
+    unsigned int i = 0;
+    // Before period
+    for (; i < strsrc.size(); i++) {
+        if (strsrc[i] == '.') break;
+        std::cout << strsrc[i];
+    }
+    // After period
+    if (precision_ != 0) {
+        for (int j = -1; i < strsrc.size() && j < precision_; i++, j++)
+            std::cout << strsrc[i];
+    }
+    std::cout << std::endl;
+
+    return src;
 }
 
 ASTNodePtr Parser::parse_primary()
@@ -353,14 +394,13 @@ ASTNodePtr Parser::parse_expr()
 
 ASTNodePtr Parser::parse()
 {
-    return parse_expr();
-}
+    if (lex_.match(TOK::FMTLIT)) {
+        FormatLiteral fmtlit = std::get<FormatLiteral>(lex_.get().data);
+        return std::make_shared<FormatPrint>(parse_expr(), fmtlit.field_width,
+                                             fmtlit.precision);
+    }
 
-// Pretty print
-std::ostream &operator<<(std::ostream &os, const MPRational &r)
-{
-    os << r2f(r).str();
-    return os;
+    return std::make_shared<FormatPrint>(parse_expr(), -1, -1);
 }
 
 class StreamLine : public boost::iostreams::source {
@@ -416,7 +456,7 @@ int main(int argc, char **argv)
     Lex lex{in};
 
     if (!StreamLine::isatty()) {  // When non-interactive (batch mode)
-        std::cout << Parser{lex}.parse()->eval() << std::endl;
+        Parser{lex}.parse()->eval();
         return 0;
     }
 
@@ -424,6 +464,6 @@ int main(int argc, char **argv)
         ASTNodePtr node = Parser{lex}.parse();
         StreamLine::add_history(
             boost::algorithm::trim_copy(lex.clear_history()));
-        std::cout << node->eval() << std::endl;
+        node->eval();
     }
 }

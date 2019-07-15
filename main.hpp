@@ -24,16 +24,23 @@ enum class TOK {
     MINUS,
     STAR,
     SLASH,
+    PERCENT,
     NEWLINE,
     LPAREN,
     RPAREN,
     IDENT,
     COMMA,
+    FMTLIT,
+};
+
+struct FormatLiteral {
+    bool is_signed, is_zero_padded;
+    int field_width, precision;
 };
 
 struct Token {
     TOK kind;
-    std::variant<std::monostate, MPRational, std::string> data;
+    std::variant<std::monostate, MPRational, std::string, FormatLiteral> data;
 
     static const Token &owari()
     {
@@ -151,6 +158,20 @@ private:
 public:
     FuncCall(std::string name, std::vector<ASTNodePtr> args)
         : name_(std::move(name)), args_(std::move(args))
+    {
+    }
+
+    MPRational eval() const override;
+};
+
+class FormatPrint : public ASTNode {
+private:
+    ASTNodePtr src_;
+    int field_width_, precision_;
+
+public:
+    FormatPrint(ASTNodePtr src, int field_width, int precision)
+        : src_(std::move(src)), field_width_(field_width), precision_(precision)
     {
     }
 
