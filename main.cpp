@@ -1,17 +1,20 @@
 #include "main.hpp"
 
 #include <cassert>
+#include <deque>
 #include <functional>
 #include <sstream>
 #include <unordered_map>
 
 #include <readline/history.h>
 #include <readline/readline.h>
+// GNU readline defines NEWLINE macro, but this conflicts with TOK::NEWLINE
+#undef NEWLINE
+
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/format.hpp>
 #include <boost/iostreams/concepts.hpp>
 #include <boost/iostreams/stream.hpp>
-#include <deque>
 
 #define AQ1_RANGE(cont) std::begin(cont), std::end(cont)
 
@@ -77,7 +80,7 @@ std::string Lex::clear_history()
     return ret;
 }
 
-Token Lex::next()
+Token Lex::next_token()
 {
     if (pending_) {
         Token ret = *pending_;
@@ -132,11 +135,11 @@ Token Lex::next()
     case ',':
         return {TOK::COMMA};
     case '\n':
-        return {TOK::LFCR};
+        return {TOK::NEWLINE};
     case '\r': {
         ch = getch();
         if (ch != '\n') putback(ch);
-        return {TOK::LFCR};
+        return {TOK::NEWLINE};
     }
     }
 
@@ -148,8 +151,8 @@ Token Lex::next()
 Token Lex::get()
 {
     while (true) {
-        Token tok = next();
-        if (tok.kind != TOK::LFCR) return tok;
+        Token tok = next_token();
+        if (tok.kind != TOK::NEWLINE) return tok;
     }
 }
 
@@ -161,15 +164,15 @@ Token Lex::expect(TOK kind)
     return tok;
 }
 
-bool Lex::is(TOK kind)
+Token Lex::peek_next()
 {
-    if (!pending_) pending_ = next();
-    return pending_->kind == kind;
+    if (!pending_) pending_ = next_token();
+    return *pending_;
 }
 
 bool Lex::match(TOK kind)
 {
-    if (!pending_ || pending_->kind == TOK::LFCR) pending_ = get();
+    if (!pending_ || pending_->kind == TOK::NEWLINE) pending_ = get();
     return pending_->kind == kind;
 }
 
@@ -289,11 +292,26 @@ ASTNodePtr Parser::parse_multiplicative()
 {
     ASTNodePtr lhs = parse_unary();
 
-    while (lex_.is(TOK::STAR) || lex_.is(TOK::SLASH)) {
-        bool isMul = lex_.get().kind == TOK::STAR;
-        ASTNodePtr rhs = parse_unary();
-        lhs =
-            std::make_shared<BinOp>(isMul ? BINOP::MUL : BINOP::DIV, lhs, rhs);
+    while (true) {
+        switch (lex_.peek_next().kind) {
+        case TOK::STAR: {
+            lex_.get();  // Eat TOK::STAR
+            ASTNodePtr rhs = parse_unary();
+            lhs = std::make_shared<BinOp>(BINOP::MUL, lhs, rhs);
+        }
+            continue;
+
+        case TOK::SLASH: {
+            lex_.get();  // Eat TOK::SLASH
+            ASTNodePtr rhs = parse_unary();
+            lhs = std::make_shared<BinOp>(BINOP::DIV, lhs, rhs);
+        }
+            continue;
+
+        default:
+            break;
+        }
+        break;
     }
 
     return lhs;
@@ -303,11 +321,26 @@ ASTNodePtr Parser::parse_additive()
 {
     ASTNodePtr lhs = parse_multiplicative();
 
-    while (lex_.is(TOK::PLUS) || lex_.is(TOK::MINUS)) {
-        bool isAdd = lex_.get().kind == TOK::PLUS;
-        ASTNodePtr rhs = parse_multiplicative();
-        lhs =
-            std::make_shared<BinOp>(isAdd ? BINOP::ADD : BINOP::SUB, lhs, rhs);
+    while (true) {
+        switch (lex_.peek_next().kind) {
+        case TOK::PLUS: {
+            lex_.get();  // Eat TOK::PLUS
+            ASTNodePtr rhs = parse_multiplicative();
+            lhs = std::make_shared<BinOp>(BINOP::ADD, lhs, rhs);
+        }
+            continue;
+
+        case TOK::MINUS: {
+            lex_.get();  // Eat TOK::MINUS
+            ASTNodePtr rhs = parse_multiplicative();
+            lhs = std::make_shared<BinOp>(BINOP::SUB, lhs, rhs);
+        }
+            continue;
+
+        default:
+            break;
+        }
+        break;
     }
 
     return lhs;

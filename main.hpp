@@ -24,7 +24,7 @@ enum class TOK {
     MINUS,
     STAR,
     SLASH,
-    LFCR,
+    NEWLINE,
     LPAREN,
     RPAREN,
     IDENT,
@@ -50,24 +50,22 @@ private:
 
     int getch();
     void putback(int ch);
+    Token next_token();
 
 public:
     Lex(std::istream &is) : is_(is), pending_(std::nullopt)
     {
     }
 
-    // Get the next token. This function will NOT skip `LFCR`.
-    Token next();
-    // Return if the next token's kind is `kind`. This function will NOT skip
-    // `LFCR`.
-    bool is(TOK kind);
-    // Get the next token. This function WILL skip `LFCR`.
+    // Get the next non-NEWLINE token.
     Token get();
-    // Expect the next token. This function WILL skip `LFCR`.
+    // Expect the next non-NEWLINE token.
     Token expect(TOK kind);
-    // Return if the next token's kind is `kind`. This function WILL skip
-    // `LFCR`.
+    // Return if the next non-NEWLINE token's kind is `kind`.
     bool match(TOK kind);
+
+    // Peek the next token. This function will NOT skip NEWLINE.
+    Token peek_next();
 
     std::string clear_history();
 };
